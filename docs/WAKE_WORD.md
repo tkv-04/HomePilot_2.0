@@ -2,18 +2,18 @@
 
 ## Default Wake Word
 
-HomePilot uses **"Jarvis"** as the default wake word via Picovoice Porcupine.
+HomePilot uses **"Jarvis"** as the default wake word via Picovoice Porcupine. This works on both Linux and Windows.
 
 ## Changing to a Built-in Keyword
 
-Porcupine includes several built-in keywords. To change:
+Porcupine includes several built-in keywords:
 
 ```yaml
 wakeword:
   keyword: "alexa"  # or: computer, hey google, jarvis, ok google, picovoice, etc.
 ```
 
-Available built-in keywords vary by platform. Check [Porcupine docs](https://picovoice.ai/docs/porcupine/) for the full list.
+Available keywords vary by platform. Check [Porcupine docs](https://picovoice.ai/docs/porcupine/) for the full list.
 
 ## Training a Custom Wake Word
 
@@ -22,22 +22,22 @@ Available built-in keywords vary by platform. Check [Porcupine docs](https://pic
 1. Go to [console.picovoice.ai](https://console.picovoice.ai)
 2. Select **Porcupine** → **Custom Wake Word**
 3. Enter your desired wake word
-4. Select target platform: **Raspberry Pi (Linux ARM)**
+4. Select target platform:
+   - **Raspberry Pi:** Linux ARM
+   - **Windows:** Windows x86_64
 5. Download the `.ppn` file
 
 ### Using the Custom Keyword
 
-1. Place the `.ppn` file in your `models/` directory:
-   ```
-   models/my_wake_word_en_raspberry-pi.ppn
-   ```
+Place the `.ppn` file in your `models/` directory and update config:
 
-2. Update config:
-   ```yaml
-   wakeword:
-     custom_keyword_path: "models/my_wake_word_en_raspberry-pi.ppn"
-     sensitivity: 0.6
-   ```
+```yaml
+wakeword:
+  custom_keyword_path: "models/my_wake_word.ppn"
+  sensitivity: 0.6
+```
+
+> **Important:** Porcupine `.ppn` files are platform-specific. If you run on both Linux and Windows, you need separate `.ppn` files for each platform and can switch via the config file.
 
 ## Adjusting Sensitivity
 
@@ -48,20 +48,12 @@ wakeword:
 
 | Value | Behavior |
 |-------|----------|
-| 0.0 | Fewest false activations, may miss some detections |
+| 0.0 | Fewest false activations, may miss detections |
 | 0.5 | Balanced (recommended starting point) |
 | 0.7 | More responsive, slightly more false activations |
-| 1.0 | Maximum responsiveness, most false activations |
+| 1.0 | Maximum responsiveness |
 
-**Tip**: Start at 0.5 and increase by 0.1 if the wake word is being missed. Decrease if it's triggering randomly.
-
-## Multiple Wake Words (Future)
-
-The architecture supports multiple wake words. To add support:
-
-1. Train additional `.ppn` files
-2. Modify `WakeWordDetector` to accept a list of keyword paths
-3. Pass multiple sensitivities (one per keyword)
+**Tip:** Start at 0.5. Increase by 0.1 if it misses detections. Decrease if it triggers randomly.
 
 ## Tips for Custom Wake Words
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-HomePilot integrates with Home Assistant via the REST API. It supports:
+HomePilot integrates with Home Assistant via the REST API on both Linux and Windows. It supports:
 - Controlling lights, switches, fans, locks
 - Querying sensor values
 - Running scenes and automations
@@ -15,9 +15,8 @@ HomePilot integrates with Home Assistant via the REST API. It supports:
 1. Open Home Assistant web UI
 2. Go to your **Profile** (bottom-left)
 3. Scroll to **Long-Lived Access Tokens**
-4. Click **Create Token**
-5. Name it "HomePilot"
-6. Copy the token
+4. Click **Create Token**, name it "HomePilot"
+5. Copy the token
 
 ### 2. Configure HomePilot
 
@@ -34,51 +33,50 @@ home_assistant:
 
 ### 3. Encrypted Token Storage (Recommended)
 
-Instead of putting the token in plaintext config, store it encrypted:
+Instead of plaintext config, store the token encrypted:
 
-```python
+**Linux:**
+```bash
+source venv/bin/activate
+python -c "
 from homepilot.security.token_store import TokenStore
+store = TokenStore('data/.keyfile')
+store.store_token('ha_token', 'YOUR_LONG_LIVED_TOKEN')
+print('Token stored securely.')
+"
+```
 
-store = TokenStore("data/.keyfile")
-store.store_token("ha_token", "YOUR_LONG_LIVED_TOKEN")
+**Windows:**
+```powershell
+.\venv\Scripts\activate
+python -c "from homepilot.security.token_store import TokenStore; store = TokenStore('data/.keyfile'); store.store_token('ha_token', 'YOUR_LONG_LIVED_TOKEN'); print('Token stored.')"
 ```
 
 Then set `use_encrypted_token: true` in config and leave `access_token` empty.
 
 ## Voice Commands
 
-### Device Control
-- "Turn on the kitchen light"
-- "Turn off the bedroom fan"
-- "Set the living room light to 50 percent"
-
-### Sensors
-- "What's the temperature?"
-- "What's the humidity reading?"
-
-### Scenes & Automations
-- "Activate movie night scene"
-- "Run the goodnight automation"
+| Command | Example |
+|---------|---------|
+| Device control | "Turn on the kitchen light" |
+| Brightness | "Set the living room light to 50 percent" |
+| Sensors | "What's the temperature?" |
+| Scenes | "Activate movie night scene" |
+| Automations | "Run the goodnight automation" |
 
 ## Nabu Casa Cloud Fallback
-
-If you have a [Nabu Casa](https://www.nabucasa.com/) subscription:
 
 ```yaml
 home_assistant:
   cloud_url: "https://your-instance.ui.nabu.casa"
-  prefer_local: true   # Still tries local first
+  prefer_local: true   # Tries local first
 ```
 
-HomePilot will automatically fall back to the cloud URL if the local API is unreachable.
+HomePilot automatically falls back to the cloud URL if the local API is unreachable. Works identically on Linux and Windows.
 
 ## Entity Naming Tips
 
-HomePilot searches for entities by matching your voice command against entity IDs and friendly names. For best results:
-
-- Use clear, descriptive **friendly names** in HA
-  - ✅ "Kitchen Light" — matches "turn on the kitchen light"
-  - ❌ "light.switch_relay_7c_03" — harder to match
+- Use clear **friendly names** in HA (e.g., "Kitchen Light" not "light.switch_relay_7c")
 - Keep names unique per room
 - Voice commands support partial matching
 
@@ -86,7 +84,7 @@ HomePilot searches for entities by matching your voice command against entity ID
 
 | Issue | Solution |
 |-------|----------|
-| "Not connected to HA" | Verify `local_url` is reachable: `curl http://IP:8123/api/ -H "Authorization: Bearer TOKEN"` |
-| "Entity not found" | Check entity naming in HA. Use `Developer Tools > States` to see exact entity IDs. |
-| Cloud fallback not working | Verify Nabu Casa subscription is active and `cloud_url` is correct. |
-| Timeout errors | Increase `timeout` value. Check network connectivity. |
+| "Not connected to HA" | Verify URL is reachable: `curl http://IP:8123/api/` (Linux) or `Invoke-WebRequest http://IP:8123/api/` (Windows) |
+| "Entity not found" | Check entity naming in HA Developer Tools → States |
+| Cloud fallback fails | Verify Nabu Casa subscription and `cloud_url` |
+| Timeout errors | Increase `timeout` value. Check network connectivity |

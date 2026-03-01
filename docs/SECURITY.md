@@ -1,8 +1,8 @@
 # Security Hardening Guide
 
-HomePilot is designed with security-first principles. This guide covers the security architecture and hardening recommendations.
+HomePilot is designed with security-first principles. This guide covers the security architecture and hardening recommendations for both Linux and Windows.
 
-## Security Architecture Overview
+## Security Architecture
 
 ```
 ┌──────────────────────────────────────────┐
@@ -36,8 +36,11 @@ HomePilot is designed with security-first principles. This guide covers the secu
 No arbitrary shell execution. Every command must be in the whitelist:
 ```yaml
 os_control:
-  allowed_apps: ["firefox", "vlc", "nautilus"]
-  allowed_commands: ["shutdown", "reboot", "volume_up"]
+  allowed_apps:
+    - "firefox"    # Cross-platform
+    - "vlc"
+    - "explorer"   # Windows
+    - "nautilus"   # Linux
 ```
 
 ### 2. Input Sanitization
@@ -57,68 +60,72 @@ API tokens are encrypted at rest using Fernet (AES-128-CBC):
 security:
   token_encryption_key_file: "data/.keyfile"
 ```
-Key file permissions are set to `600` (owner-only read/write).
 
-### 5. Sandboxed Execution
-Subprocesses run with a minimal environment — only safe variables (PATH, HOME, LANG, DISPLAY) are passed.
+### 5. Sandboxed Execution (Platform-Aware)
+Subprocesses run with a minimal environment:
+- **Linux:** Only `PATH`, `HOME`, `USER`, `LANG`, `DISPLAY`, X11/Wayland vars
+- **Windows:** Only `PATH`, `SYSTEMROOT`, `TEMP`, `USERPROFILE`, `COMSPEC`, `WINDIR`
 
 ### 6. Plugin Integrity Checking
 Plugins are verified against a SHA256 manifest before loading:
-```yaml
-security:
-  enable_plugin_integrity: true
-plugins:
-  manifest_file: "plugins/manifest.json"
-```
-
-Generate a manifest after adding/updating plugins:
 ```python
 from homepilot.plugins.plugin_manager import PluginManager
 pm = PluginManager(plugin_dir="plugins")
 pm.generate_manifest()
 ```
 
-### 7. systemd Security
+### 7. systemd Security (Linux)
 The service file includes:
 - `NoNewPrivileges=true` — prevents privilege escalation
 - `ProtectSystem=strict` — read-only filesystem
-- `ProtectHome=read-only` — limited home directory access
+- `ProtectHome=read-only` — limited home access
 - `PrivateTmp=true` — isolated temp directory
 - `MemoryMax=512M` / `CPUQuota=80%` — resource limits
 
-## Hardening Recommendations
+## Platform-Specific Hardening
 
-### Network
-- Enable `local_only_mode` to block all outbound network requests
-- Use firewall rules to restrict traffic:
-  ```bash
-  sudo ufw default deny incoming
-  sudo ufw default deny outgoing
-  sudo ufw allow out to 192.168.0.0/16  # Local network only
-  ```
+### Linux
 
-### Filesystem
-- Set restrictive permissions on the data directory:
-  ```bash
-  chmod 700 data/
-  chmod 600 data/.keyfile data/.tokens.enc
-  ```
+```bash
+# Firewall — local network only
+sudo ufw default deny incoming
+sudo ufw default deny outgoing
+sudo ufw allow out to 192.168.0.0/16
 
-### Confirmation for Dangerous Commands
-```yaml
-os_control:
-  require_confirmation: ["shutdown", "reboot"]
+# File permissions
+chmod 700 data/
+chmod 600 data/.keyfile data/.tokens.enc
 ```
 
-### Disable Unused Features
-```yaml
-home_assistant:
-  enabled: false  # If not using HA
-os_control:
-  enabled: false  # If not needing OS commands
-plugins:
-  enabled: false  # If not using plugins
+### Windows
+
+```powershell
+# Restrict data folder access (PowerShell as Admin)
+$acl = Get-Acl "data"
+$acl.SetAccessRuleProtection($true, $false)
+$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    $env:USERNAME, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+$acl.AddAccessRule($rule)
+Set-Acl "data" $acl
+
+# Windows Firewall — block outbound for HomePilot
+New-NetFirewallRule -DisplayName "HomePilot Block Outbound" `
+    -Direction Outbound -Program "venv\Scripts\python.exe" -Action Block
 ```
 
-### Log Security
-Secure logging automatically redacts tokens, access keys, passwords, and Bearer tokens from all log output.
+## General Recommendations
+
+- Enable `local_only_mode: true` to block all outbound network requests
+- Require confirmation for dangerous commands:
+  ```yaml
+  os_control:
+    require_confirmation: ["shutdown", "reboot"]
+  ```
+- Disable unused features:
+  ```yaml
+  home_assistant:
+    enabled: false
+  plugins:
+    enabled: false
+  ```
+- Secure logging automatically redacts tokens, access keys, passwords, and Bearer tokens from all log output

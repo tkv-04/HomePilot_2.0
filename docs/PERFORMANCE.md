@@ -1,6 +1,8 @@
 # Performance Optimization Guide
 
-## Resource Benchmarks (Raspberry Pi 4, 4GB)
+## Resource Benchmarks
+
+### Raspberry Pi 4 (4GB)
 
 | Component | CPU | RAM | Latency |
 |-----------|-----|-----|---------|
@@ -9,92 +11,94 @@
 | TTS (Piper medium) | ~40% peak | ~100 MB | ~200ms |
 | Idle (listening) | ~3% | ~150 MB total | — |
 
+### Windows Desktop (Typical)
+
+| Component | CPU | RAM | Latency |
+|-----------|-----|-----|---------|
+| Wake word (Porcupine) | <1% | ~5 MB | <5ms |
+| STT (Vosk small model) | ~10% peak | ~80 MB | <0.5s |
+| TTS (Piper medium) | ~15% peak | ~100 MB | ~100ms |
+| TTS (Windows SAPI fallback) | ~5% | ~10 MB | ~300ms |
+| Idle (listening) | ~1% | ~120 MB total | — |
+
 ## Optimization Tips
 
-### 1. Use the Small Vosk Model
+### 1. Choose the Right Vosk Model
 ```yaml
 stt:
   model_path: "models/vosk-model-small-en-us-0.15"  # ~40MB, fast
 ```
-The large model (1.8GB) gives better accuracy but is slower on RPi.
+The large model (1.8GB) gives better accuracy but is slower, especially on RPi.
 
-### 2. Reduce Audio Frame Size
-Smaller frames = more responsive wake word but slightly higher CPU:
+### 2. Tune Silence Timeout
+Reduce for faster command completion:
 ```yaml
 audio:
-  frame_length: 512    # Default, good balance
-  # frame_length: 256  # More responsive but higher CPU
+  vad_silence_timeout: 2.0  # Default 3.0
+  max_record_seconds: 8     # Default 10
 ```
 
-### 3. Tune Silence Timeout
-Reduce the silence timeout for faster command completion:
-```yaml
-audio:
-  vad_silence_timeout: 2.0  # Default: 3.0 — reducing speeds up response
-  max_record_seconds: 8     # Default: 10
-```
+### 3. TTS Voice Selection
+| Voice | Latency (RPi) | Latency (Windows) |
+|-------|---------------|-------------------|
+| `en_US-lessac-low` | ~100ms | ~50ms |
+| `en_US-lessac-medium` | ~200ms | ~100ms |
+| `en_US-lessac-high` | ~400ms | ~200ms |
 
-### 4. TTS Voice Selection
-Lighter voices for faster synthesis:
-- `en_US-lessac-low` — fastest, ~100ms
-- `en_US-lessac-medium` — balanced, ~200ms (recommended)
-- `en_US-lessac-high` — best quality, ~400ms
-
-### 5. Disable Unused Modules
+### 4. Disable Unused Modules
 ```yaml
 home_assistant:
-  enabled: false       # If not using HA
+  enabled: false
 plugins:
-  enabled: false       # If not using plugins
+  enabled: false
 ```
 
-### 6. CPU Governor
-Set the CPU governor to `performance` for consistent latency:
+### 5. Platform-Specific Tuning
+
+**Linux (Raspberry Pi):**
 ```bash
+# Set CPU governor to performance
 echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+
+# Reduce GPU memory
+sudo raspi-config  # → Performance → GPU Memory → 16MB
+
+# ALSA buffer optimization
+# /etc/asound.conf:
+# pcm.!default { type hw; card 1; period_size 512; buffer_size 4096 }
 ```
 
-### 7. Memory Management
-- Use 64-bit Raspberry Pi OS for efficient memory use
-- Reduce GPU memory: `sudo raspi-config` → Performance → GPU Memory → 16MB
-- Add swap if needed: `sudo dphys-swapfile setup && sudo dphys-swapfile swapon`
+**Windows:**
+```powershell
+# Set power plan to High Performance
+powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
 
-### 8. Audio Optimization
-- Use a USB audio adapter instead of the 3.5mm jack for lower latency
-- Set ALSA buffer sizes:
-  ```bash
-  # In /etc/asound.conf
-  pcm.!default {
-      type hw
-      card 1
-      format S16_LE
-      rate 16000
-      period_size 512
-      buffer_size 4096
-  }
-  ```
+# Disable unnecessary audio enhancements
+# Settings → Sound → Device Properties → Disable Enhancements
+```
 
 ## Monitoring Performance
 
+**Linux:**
 ```bash
-# Real-time system stats
-htop
-
-# CPU temperature
-vcgencmd measure_temp
-
-# HomePilot logs
-journalctl -u homepilot -f
-
-# Memory usage
-free -h
+htop                       # Real-time stats
+vcgencmd measure_temp      # CPU temperature (RPi)
+journalctl -u homepilot -f # HomePilot logs
+free -h                    # Memory
 ```
 
-## Performance Goals Summary
+**Windows:**
+```powershell
+taskmgr                    # Task Manager
+Get-Process python | Select CPU, WorkingSet  # Python resource usage
+Get-Content logs\homepilot.log -Tail 20      # Recent logs
+```
 
-| Metric | Target | Achievable |
-|--------|--------|------------|
-| Wake-to-response | < 2s | ✅ ~1.5s typical |
-| CPU idle | < 5% | ✅ ~3% |
-| RAM total | < 300MB | ✅ ~150-200MB |
-| 24/7 stability | Weeks | ✅ With crash recovery |
+## Performance Goals
+
+| Metric | Target | RPi 4 | Windows Desktop |
+|--------|--------|-------|-----------------|
+| Wake-to-response | < 2s | ~1.5s | ~0.8s |
+| CPU idle | < 5% | ~3% | ~1% |
+| RAM total | < 300MB | ~150-200MB | ~120-150MB |
+| 24/7 stability | Weeks | ✅ | ✅ |
