@@ -65,14 +65,24 @@ home_assistant:
 # --- OS Control ---
 os_control:
   enabled: true
-  # Whitelisted applications that can be launched by voice
+  # Whitelisted applications (cross-platform)
   allowed_apps:
+    # Cross-platform
     - "firefox"
-    - "chromium-browser"
     - "vlc"
+    - "code"
+    # Linux
+    - "chromium-browser"
     - "nautilus"
     - "terminal"
-    - "code"
+    # Windows
+    - "chrome"
+    - "edge"
+    - "notepad"
+    - "calculator"
+    - "explorer"
+    - "powershell"
+    - "cmd"
   # Whitelisted system commands
   allowed_commands:
     - "shutdown"

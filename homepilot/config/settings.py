@@ -77,7 +77,13 @@ class OSControlConfig:
     """OS command control settings."""
     enabled: bool = True
     allowed_apps: list[str] = field(default_factory=lambda: [
-        "firefox", "chromium-browser", "vlc", "nautilus", "terminal", "code"
+        # Cross-platform
+        "firefox", "vlc", "code",
+        # Linux
+        "chromium-browser", "nautilus", "terminal",
+        # Windows
+        "chrome", "edge", "notepad", "calculator", "explorer",
+        "powershell", "cmd",
     ])
     allowed_commands: list[str] = field(default_factory=lambda: [
         "shutdown", "reboot", "volume_up", "volume_down", "volume_mute",

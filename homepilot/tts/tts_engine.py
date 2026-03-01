@@ -8,6 +8,7 @@ entirely on-device. Low latency, natural sounding.
 from __future__ import annotations
 
 import io
+import platform
 import queue
 import subprocess
 import threading
@@ -148,9 +149,9 @@ class TTSEngine:
         except Exception as e:
             logger.debug("Piper synthesis failed: %s. Trying fallback.", e)
 
-        # Fallback to espeak (available on most Linux systems)
+        # Fallback: espeak (Linux) or SAPI (Windows)
         try:
-            self._espeak_fallback(text)
+            self._platform_tts_fallback(text)
         except Exception as e:
             logger.error("All TTS methods failed: %s", e)
 
@@ -202,16 +203,70 @@ class TTSEngine:
 
         return None
 
-    def _espeak_fallback(self, text: str) -> None:
-        """Fallback TTS using espeak."""
-        try:
-            subprocess.run(
-                ["espeak", "-s", "150", text],
-                capture_output=True,
-                timeout=30,
-            )
-        except FileNotFoundError:
-            logger.error("espeak not found. Install with: sudo apt install espeak")
+    def _platform_tts_fallback(self, text: str) -> None:
+        """
+        Platform-aware TTS fallback.
+
+        Linux: uses espeak
+        Windows: uses Windows SAPI (built-in speech synthesizer)
+        """
+        if platform.system() == "Windows":
+            try:
+                # Windows SAPI — built-in, always available
+                ps_script = (
+                    f'Add-Type -AssemblyName System.Speech; '
+                    f'$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; '
+                    f'$synth.Rate = 1; '
+                    f'$synth.Speak("{text.replace(chr(34), chr(39))}")'
+                )
+                subprocess.run(
+                    ["powershell", "-Command", ps_script],
+                    capture_output=True,
+                    timeout=30,
+                )
+                return
+            except Exception as e:
+                logger.debug("Windows SAPI failed: %s", e)
+
+            # Try espeak on Windows (if installed)
+            try:
+                subprocess.run(
+                    ["espeak", "-s", "150", text],
+                    capture_output=True,
+                    timeout=30,
+                )
+                return
+            except FileNotFoundError:
+                pass
+        else:
+            # Linux / macOS — try espeak
+            try:
+                subprocess.run(
+                    ["espeak", "-s", "150", text],
+                    capture_output=True,
+                    timeout=30,
+                )
+                return
+            except FileNotFoundError:
+                pass
+
+            # macOS fallback — built-in 'say' command
+            if platform.system() == "Darwin":
+                try:
+                    subprocess.run(
+                        ["say", text],
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    return
+                except FileNotFoundError:
+                    pass
+
+        logger.error(
+            "No TTS fallback available. "
+            "Linux: install espeak (sudo apt install espeak). "
+            "Windows: SAPI should be built-in."
+        )
 
     def _play_audio(self, wav_data: bytes) -> None:
         """Play WAV audio data through the speaker."""
