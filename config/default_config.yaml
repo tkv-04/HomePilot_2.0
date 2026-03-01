@@ -1,0 +1,117 @@
+# ============================================================
+# HomePilot Configuration
+# ============================================================
+# Copy this file to config/config.yaml and edit as needed.
+# All core features work offline — internet is NEVER required.
+# ============================================================
+
+# --- General ---
+assistant_name: "Jarvis"
+language: "en"
+log_level: "INFO"            # DEBUG | INFO | WARNING | ERROR
+log_file: "logs/homepilot.log"
+
+# --- Wake Word ---
+wakeword:
+  engine: "porcupine"        # porcupine (recommended)
+  keyword: "jarvis"           # Built-in keyword name
+  custom_keyword_path: ""     # Path to custom .ppn file (optional)
+  sensitivity: 0.6            # 0.0 (fewest false alarms) to 1.0 (fewest misses)
+  access_key: ""              # Picovoice access key (free at console.picovoice.ai)
+
+# --- Audio Input ---
+audio:
+  input_device: null           # null = system default mic
+  output_device: null          # null = system default speaker
+  sample_rate: 16000
+  frame_length: 512            # Samples per frame
+  vad_silence_timeout: 3.0     # Seconds of silence before stopping recording
+  max_record_seconds: 10       # Maximum recording duration after wake word
+  noise_calibration_seconds: 1  # Seconds of ambient noise sampling at start
+
+# --- Speech-to-Text ---
+stt:
+  engine: "vosk"
+  model_path: "models/vosk-model-small-en-us-0.15"
+  # Download from: https://alphacephei.com/vosk/models
+  # Recommended small model: vosk-model-small-en-us-0.15 (~40MB)
+  # Recommended large model: vosk-model-en-us-0.22 (~1.8GB)
+
+# --- Text-to-Speech ---
+tts:
+  engine: "piper"
+  model_path: "models/en_US-lessac-medium.onnx"
+  # Download from: https://github.com/rhasspy/piper/releases
+  config_path: "models/en_US-lessac-medium.onnx.json"
+  speech_rate: 1.0             # 0.5 (slow) to 2.0 (fast)
+  volume: 0.8                  # 0.0 to 1.0
+
+# --- Intent Engine ---
+intent:
+  confidence_threshold: 0.5    # Minimum confidence for intent match
+  fallback_response: "I'm sorry, I didn't understand that. Could you try again?"
+
+# --- Home Assistant ---
+home_assistant:
+  enabled: false
+  local_url: "http://homeassistant.local:8123"
+  cloud_url: ""                # Nabu Casa URL (optional fallback)
+  access_token: ""             # Long-lived access token
+  use_encrypted_token: true    # Store token encrypted on disk
+  verify_ssl: false
+  timeout: 10                  # Request timeout in seconds
+  prefer_local: true           # Use local API when available
+
+# --- OS Control ---
+os_control:
+  enabled: true
+  # Whitelisted applications that can be launched by voice
+  allowed_apps:
+    - "firefox"
+    - "chromium-browser"
+    - "vlc"
+    - "nautilus"
+    - "terminal"
+    - "code"
+  # Whitelisted system commands
+  allowed_commands:
+    - "shutdown"
+    - "reboot"
+    - "volume_up"
+    - "volume_down"
+    - "volume_mute"
+    - "system_status"
+  require_confirmation:
+    - "shutdown"
+    - "reboot"
+
+# --- Timers ---
+timers:
+  persistence_file: "data/timers.json"
+  max_concurrent: 20
+  alert_sound: "assets/sounds/timer_alert.wav"
+  alert_repeat: 3              # Number of times to repeat alert
+
+# --- Security ---
+security:
+  enable_command_validation: true
+  enable_rate_limiting: true
+  rate_limit_per_minute: 30
+  token_encryption_key_file: "data/.keyfile"
+  local_only_mode: false       # If true, reject ALL network requests
+  enable_plugin_integrity: true
+
+# --- Plugins ---
+plugins:
+  enabled: true
+  plugin_dir: "plugins"
+  # List of enabled plugin names
+  enabled_plugins: []
+  # SHA256 manifest for integrity checking
+  manifest_file: "plugins/manifest.json"
+
+# --- Sounds ---
+sounds:
+  wake_confirm: "assets/sounds/wake.wav"
+  error: "assets/sounds/error.wav"
+  timer_alert: "assets/sounds/timer_alert.wav"

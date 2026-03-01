@@ -1,0 +1,43 @@
+[Unit]
+Description=HomePilot Edge AI Voice Assistant
+Documentation=https://github.com/homepilot/homepilot
+After=network.target sound.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/HomePilot_2.0
+ExecStart=/home/pi/HomePilot_2.0/venv/bin/python run.py -c config/default_config.yaml
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/HomePilot_2.0/data /home/pi/HomePilot_2.0/logs
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=80%
+
+# Audio access
+SupplementaryGroups=audio
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=homepilot
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

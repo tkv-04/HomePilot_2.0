@@ -1,0 +1,43 @@
+# HomePilot
+# =========
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# AI Models (large files — download separately)
+models/
+
+# Runtime data
+data/
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Security — NEVER commit these
+data/.keyfile
+data/.tokens.enc
+config/config.yaml
+
+# Keep defaults
+!config/default_config.yaml
