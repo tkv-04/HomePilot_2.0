@@ -38,7 +38,7 @@ sudo apt install -y git
 
 ```bash
 cd ~
-git clone <your-repo-url> HomePilot_2.0
+git clone https://github.com/tkv-04/HomePilot_2.0
 cd HomePilot_2.0
 
 chmod +x deploy/install.sh
@@ -66,7 +66,7 @@ Download Python 3.11+ from [python.org](https://www.python.org/downloads/). Duri
 ### Step 2: Clone & Install
 
 ```powershell
-git clone <your-repo-url> HomePilot_2.0
+git clone https://github.com/tkv-04/HomePilot_2.0
 cd HomePilot_2.0
 
 .\deploy\install.ps1

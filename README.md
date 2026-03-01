@@ -37,7 +37,7 @@ All AI processing runs on-device — no cloud required.
 ### On Raspberry Pi (Linux)
 
 ```bash
-git clone <repo-url> ~/HomePilot_2.0
+git clone https://github.com/tkv-04/HomePilot_2.0 ~/HomePilot_2.0
 cd ~/HomePilot_2.0
 
 chmod +x deploy/install.sh
@@ -52,7 +52,7 @@ python run.py
 ### On Windows
 
 ```powershell
-git clone <repo-url> HomePilot_2.0
+git clone https://github.com/tkv-04/HomePilot_2.0
 cd HomePilot_2.0
 
 .\deploy\install.ps1

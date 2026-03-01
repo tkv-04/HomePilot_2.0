@@ -1,6 +1,6 @@
 [Unit]
 Description=HomePilot Edge AI Voice Assistant
-Documentation=https://github.com/homepilot/homepilot
+Documentation=https://github.com/tkv-04/HomePilot_2.0
 After=network.target sound.target
 Wants=network.target
 
