@@ -36,6 +36,7 @@ Thumbs.db
 desktop.ini
 
 # Security — NEVER commit these
+.env
 data/.keyfile
 data/.tokens.enc
 config/config.yaml

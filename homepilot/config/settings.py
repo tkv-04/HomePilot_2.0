@@ -159,11 +159,14 @@ class Settings:
     @classmethod
     def load(cls, config_path: str | Path | None = None) -> Settings:
         """
-        Load settings from a YAML config file.
+        Load settings from YAML config + .env file.
 
-        Falls back to default_config.yaml if no path is provided.
-        Missing keys use dataclass defaults.
+        Priority: Environment variables > YAML config > dataclass defaults.
+        Loads .env file from project root if present.
         """
+        # Load .env file if it exists
+        cls._load_env_file(PROJECT_ROOT / ".env")
+
         if config_path is None:
             config_path = PROJECT_ROOT / "config" / "default_config.yaml"
         else:
@@ -176,7 +179,79 @@ class Settings:
                 if isinstance(loaded, dict):
                     data = loaded
 
-        return cls._from_dict(data)
+        settings = cls._from_dict(data)
+
+        # Override with environment variables (highest priority)
+        settings._apply_env_overrides()
+
+        return settings
+
+    @staticmethod
+    def _load_env_file(env_path: Path) -> None:
+        """
+        Load variables from a .env file into os.environ.
+
+        Only sets variables that are NOT already set in the
+        environment, so real env vars always take priority.
+        """
+        if not env_path.exists():
+            return
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                # Skip comments and empty lines
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                # Only set if not already in environment
+                if key and key not in os.environ:
+                    os.environ[key] = value
+
+    def _apply_env_overrides(self) -> None:
+        """Apply environment variable overrides to settings."""
+        env = os.environ.get
+
+        # Picovoice
+        if env("PICOVOICE_ACCESS_KEY"):
+            self.wakeword.access_key = env("PICOVOICE_ACCESS_KEY", "")
+
+        # Home Assistant
+        if env("HA_ACCESS_TOKEN"):
+            self.home_assistant.access_token = env("HA_ACCESS_TOKEN", "")
+        if env("HA_LOCAL_URL"):
+            self.home_assistant.local_url = env("HA_LOCAL_URL", "")
+        if env("HA_CLOUD_URL"):
+            self.home_assistant.cloud_url = env("HA_CLOUD_URL", "")
+
+        # General
+        if env("HOMEPILOT_LOG_LEVEL"):
+            self.log_level = env("HOMEPILOT_LOG_LEVEL", "INFO")
+        if env("HOMEPILOT_ASSISTANT_NAME"):
+            self.assistant_name = env("HOMEPILOT_ASSISTANT_NAME", "Jarvis")
+        if env("HOMEPILOT_LANGUAGE"):
+            self.language = env("HOMEPILOT_LANGUAGE", "en")
+
+        # Audio devices
+        if env("AUDIO_INPUT_DEVICE"):
+            try:
+                self.audio.input_device = int(env("AUDIO_INPUT_DEVICE", ""))
+            except ValueError:
+                pass
+        if env("AUDIO_OUTPUT_DEVICE"):
+            try:
+                self.audio.output_device = int(env("AUDIO_OUTPUT_DEVICE", ""))
+            except ValueError:
+                pass
+
+        # Security
+        if env("TOKEN_ENCRYPTION_KEY_FILE"):
+            self.security.token_encryption_key_file = env(
+                "TOKEN_ENCRYPTION_KEY_FILE", "data/.keyfile"
+            )
 
     @classmethod
     def _from_dict(cls, data: dict[str, Any]) -> Settings:
