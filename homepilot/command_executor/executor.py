@@ -101,7 +101,11 @@ class CommandExecutor:
     def _handle_control_device(self, intent: Intent, entities: ResolvedEntities) -> str:
         """Handle device on/off/toggle commands via Home Assistant."""
         if not self._ha:
-            return "Home Assistant is not configured."
+            device = entities.device_name or intent.slots.get('device', 'the device')
+            return (
+                f"I'd love to control {device}, but Home Assistant isn't set up yet. "
+                "Add your HA details to the config file to enable smart home control."
+            )
 
         device = entities.device_name or "device"
         action = entities.action or "toggle"
@@ -120,7 +124,7 @@ class CommandExecutor:
     def _handle_dim_device(self, intent: Intent, entities: ResolvedEntities) -> str:
         """Handle device brightness/dim commands."""
         if not self._ha:
-            return "Home Assistant is not configured."
+            return "Home Assistant isn't configured yet. Set it up in your config to control device brightness."
 
         device = entities.device_name or "light"
         brightness = entities.brightness or 50
@@ -202,7 +206,7 @@ class CommandExecutor:
     def _handle_run_scene(self, intent: Intent, entities: ResolvedEntities) -> str:
         """Handle scene/automation activation."""
         if not self._ha:
-            return "Home Assistant is not configured."
+            return "Home Assistant isn't configured yet. Set it up in your config to use scenes."
         scene = entities.scene_name or ""
         if not scene:
             return "Which scene would you like me to activate?"
@@ -215,7 +219,7 @@ class CommandExecutor:
     def _handle_query_sensor(self, intent: Intent, entities: ResolvedEntities) -> str:
         """Handle sensor queries."""
         if not self._ha:
-            return "Home Assistant is not configured."
+            return "Home Assistant isn't configured yet. Set it up in your config to query sensors."
         sensor = entities.sensor_name or ""
         if not sensor:
             return "Which sensor would you like to check?"
@@ -256,7 +260,88 @@ class CommandExecutor:
 
     def _handle_unknown(self, intent: Intent, entities: ResolvedEntities) -> str:
         """Handle unrecognized commands."""
-        return "I'm sorry, I didn't understand that. Could you try again?"
+        raw = intent.raw_text
+        if raw:
+            return (
+                f"I heard '{raw}', but I'm not sure what to do with that. "
+                "Try saying something like 'turn on the light', "
+                "'set a timer for 5 minutes', or 'what's the temperature?'"
+            )
+        return "I didn't catch that. Could you try again?"
+
+    def _handle_tell_joke(self, intent: Intent, entities: ResolvedEntities) -> str:
+        """Handle joke requests."""
+        import random
+        jokes = [
+            "Why do programmers prefer dark mode? Because light attracts bugs!",
+            "I told my wife she was drawing her eyebrows too high. She looked surprised.",
+            "Why don't scientists trust atoms? Because they make up everything!",
+            "What do you call a fake noodle? An impasta!",
+            "I'm reading a book about anti-gravity. It's impossible to put down!",
+            "Why did the scarecrow win an award? He was outstanding in his field!",
+            "What do you call a bear with no teeth? A gummy bear!",
+            "I would tell you a joke about UDP, but you might not get it.",
+            "There are only 10 types of people. Those who understand binary and those who don't.",
+            "Why was the math book sad? Because it had too many problems.",
+            "What's a computer's favorite snack? Microchips!",
+            "Why did the developer go broke? Because he used up all his cache.",
+            "How does a computer get drunk? It takes screenshots.",
+            "What did the ocean say to the shore? Nothing, it just waved.",
+            "Why don't eggs tell jokes? They'd crack each other up!",
+            "I'm not lazy, I'm just on energy saving mode.",
+            "What do you call a sleeping dinosaur? A dino-snore!",
+            "Why did the coffee file a police report? It got mugged!",
+            "Parallel lines have so much in common. It's a shame they'll never meet.",
+            "A SQL query walks into a bar, sees two tables, and asks... can I join you?",
+        ]
+        return random.choice(jokes)
+
+    def _handle_identity(self, intent: Intent, entities: ResolvedEntities) -> str:
+        """Handle identity questions."""
+        return (
+            f"I'm {self._name}, your personal voice assistant! "
+            "I run entirely on your device — no cloud, no data leaving your home. "
+            "I can control your smart home, set timers, launch apps, and more."
+        )
+
+    def _handle_capabilities(self, intent: Intent, entities: ResolvedEntities) -> str:
+        """Handle capability questions."""
+        return (
+            "Here's what I can do! "
+            "Control smart home devices through Home Assistant. "
+            "Set timers and reminders. "
+            "Tell you the time and date. "
+            "Launch applications. "
+            "Control system volume. "
+            "Check system status. "
+            "Tell jokes. "
+            "And I'm always learning! Just say my name to get started."
+        )
+
+    def _handle_how_are_you(self, intent: Intent, entities: ResolvedEntities) -> str:
+        """Handle how-are-you questions."""
+        import random
+        responses = [
+            "I'm doing great, thanks for asking! All systems running smoothly.",
+            "Fantastic! My circuits are buzzing with energy.",
+            "I'm wonderful! Ready to help you with anything.",
+            "Running at optimal performance! How can I help you?",
+            "I'm great! CPU is cool, memory is free, and I'm ready to go!",
+            "Never better! What can I do for you?",
+        ]
+        return random.choice(responses)
+
+    def _handle_compliment(self, intent: Intent, entities: ResolvedEntities) -> str:
+        """Handle compliments."""
+        import random
+        responses = [
+            "Thank you! That means a lot, even for an AI!",
+            "You're too kind! I'm just doing my best.",
+            "Aww, thanks! You're pretty awesome yourself!",
+            "That makes my circuits warm! Happy to help.",
+            "Thank you! I appreciate the kind words.",
+        ]
+        return random.choice(responses)
 
     # ─────────────────────────────────────────────────────
     # Handler routing table
@@ -281,6 +366,12 @@ class CommandExecutor:
         "thank_you": _handle_thank_you,
         "time_query": _handle_time_query,
         "date_query": _handle_date_query,
+        # Conversational
+        "tell_joke": _handle_tell_joke,
+        "identity": _handle_identity,
+        "capabilities": _handle_capabilities,
+        "how_are_you": _handle_how_are_you,
+        "compliment": _handle_compliment,
     }
 
     def _run_async(self, coro: Any) -> str:

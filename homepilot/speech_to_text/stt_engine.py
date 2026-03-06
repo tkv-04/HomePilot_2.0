@@ -117,6 +117,10 @@ class STTEngine:
             if frame is None:
                 continue
 
+            # ── Audio preprocessing ──
+            # Normalize audio levels for better STT accuracy
+            frame = self._normalize_audio(frame)
+
             # Convert to bytes for Vosk
             audio_bytes = frame.astype(np.int16).tobytes()
 
@@ -146,6 +150,48 @@ class STTEngine:
         text = final_result.get("text", "").strip()
         logger.info("STT transcription: '%s'", text or "(empty)")
         return text
+
+    @staticmethod
+    def _normalize_audio(
+        frame: np.ndarray,
+        target_peak: float = 0.8,
+    ) -> np.ndarray:
+        """
+        Normalize audio frame to improve STT accuracy.
+
+        Amplifies quiet audio so the Vosk model gets a stronger
+        signal. This is critical for laptop mics and low-gain
+        USB mics.
+
+        Args:
+            frame: int16 PCM audio samples.
+            target_peak: Target peak level (0.0–1.0 of int16 max).
+
+        Returns:
+            Normalized int16 audio frame.
+        """
+        if len(frame) == 0:
+            return frame
+
+        # Calculate current peak level
+        peak = np.max(np.abs(frame))
+        if peak == 0:
+            return frame
+
+        # Calculate gain needed
+        target_level = target_peak * 32767
+        gain = target_level / peak
+
+        # Limit gain to avoid amplifying noise too much
+        gain = min(gain, 10.0)
+
+        if gain > 1.1:  # Only apply if meaningful
+            amplified = (frame.astype(np.float32) * gain)
+            # Clip to int16 range
+            amplified = np.clip(amplified, -32768, 32767)
+            return amplified.astype(np.int16)
+
+        return frame
 
     def cleanup(self) -> None:
         """Release STT resources."""

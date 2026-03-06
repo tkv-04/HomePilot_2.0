@@ -39,7 +39,7 @@ class AudioConfig:
 class STTConfig:
     """Speech-to-text settings."""
     engine: str = "vosk"
-    model_path: str = "models/vosk-model-small-en-us-0.15"
+    model_path: str = "models/vosk-model-en-in-0.5"
 
 
 @dataclass
