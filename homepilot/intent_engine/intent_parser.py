@@ -475,8 +475,13 @@ class IntentParser:
         "bisi": "vlc",
     }
 
-    def __init__(self, confidence_threshold: float = 0.4) -> None:
+    def __init__(
+        self,
+        confidence_threshold: float = 0.4,
+        llm_engine: Any | None = None,
+    ) -> None:
         self.confidence_threshold = confidence_threshold
+        self._llm = llm_engine  # Optional Ollama LLM for Layer 4
 
     def parse(self, text: str) -> Intent:
         """
@@ -527,6 +532,16 @@ class IntentParser:
                 fuzzy_result.name, fuzzy_result.confidence, fuzzy_result.slots,
             )
             return fuzzy_result
+
+        # ── Layer 4: LLM fallback (if available) ──
+        if self._llm:
+            llm_result = self._llm_match(text)
+            if llm_result and llm_result.confidence >= self.confidence_threshold:
+                logger.info(
+                    "Intent [LLM]: %s (conf=%.2f) slots=%s",
+                    llm_result.name, llm_result.confidence, llm_result.slots,
+                )
+                return llm_result
 
         logger.info("No intent matched for: '%s'", original_text)
         return Intent(name="unknown", confidence=0.0, raw_text=original_text)
@@ -690,3 +705,39 @@ class IntentParser:
         for word in words:
             corrected.append(self._WORD_CORRECTIONS.get(word, word))
         return " ".join(corrected)
+
+    def _llm_match(self, text: str) -> Intent | None:
+        """
+        Layer 4: LLM-powered intent classification.
+
+        Sends the (potentially garbled) text to a local LLM
+        via Ollama and parses the structured response.
+        """
+        try:
+            result = self._llm.classify_intent(text)
+            if not result:
+                return None
+
+            intent_name = result.get("intent", "unknown")
+            confidence = float(result.get("confidence", 0.0))
+            slots = result.get("slots", {})
+            response = result.get("response", "")
+
+            # If the LLM returns "unknown" with a response, store it
+            if intent_name == "unknown" and response:
+                slots["llm_response"] = response
+
+            # Clean empty slot values
+            slots = {k: v for k, v in slots.items() if v}
+
+            return Intent(
+                name=intent_name,
+                confidence=confidence,
+                slots=slots,
+                raw_text=text,
+            )
+
+        except Exception as e:
+            logger.warning("LLM match failed: %s", e)
+            return None
+

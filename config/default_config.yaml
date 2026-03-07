@@ -7,6 +7,7 @@
 
 # --- General ---
 assistant_name: "Jarvis"
+user_name: "Thomas"
 language: "en"
 log_level: "INFO"            # DEBUG | INFO | WARNING | ERROR
 log_file: "logs/homepilot.log"
@@ -31,13 +32,12 @@ audio:
 
 # --- Speech-to-Text ---
 stt:
-  engine: "vosk"
-  # Model path: Indian English model (best for Indian accents)
-  # Alternative: vosk-model-small-en-us-0.15 (smaller, US English)
-  model_path: "models/vosk-model-en-in-0.5"
+  engine: "whisper"           # whisper (recommended) or vosk (lightweight)
+  # Whisper model sizes: tiny (~75MB), base (~150MB), small (~500MB)
+  # Recommended: base (good accuracy, works on RPi 4)
+  model_path: "base"
+  # For Vosk fallback, use: vosk-model-en-in-0.5
   # Download from: https://alphacephei.com/vosk/models
-  # Recommended small model: vosk-model-small-en-us-0.15 (~40MB)
-  # Recommended large model: vosk-model-en-us-0.22 (~1.8GB)
 
 # --- Text-to-Speech ---
 tts:
@@ -127,3 +127,24 @@ sounds:
   wake_confirm: "assets/sounds/wake.wav"
   error: "assets/sounds/error.wav"
   timer_alert: "assets/sounds/timer_alert.wav"
+
+# --- AI Agent ---
+agent:
+  enabled: true
+  max_tool_iterations: 5       # Max tool calls per request
+  llm_model: "phi3:mini"       # Ollama model for agent reasoning
+  # Supported: phi3:mini, tinyllama, qwen2.5:0.5b
+
+# --- Planner ---
+planner:
+  enabled: true
+  max_steps: 10                # Maximum steps in a plan
+
+# --- Persistent Memory ---
+memory:
+  database_path: "memory/database.db"
+  max_conversation_log: 1000   # Max entries before trimming
+
+# --- Permissions ---
+permissions:
+  permissions_file: "config/permissions.json"

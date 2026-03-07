@@ -38,8 +38,8 @@ class AudioConfig:
 @dataclass
 class STTConfig:
     """Speech-to-text settings."""
-    engine: str = "vosk"
-    model_path: str = "models/vosk-model-en-in-0.5"
+    engine: str = "whisper"
+    model_path: str = "base"  # Whisper model: tiny, base, small, medium
 
 
 @dataclass
@@ -132,6 +132,34 @@ class SoundsConfig:
 
 
 @dataclass
+class AgentConfig:
+    """AI Agent settings."""
+    enabled: bool = True
+    max_tool_iterations: int = 5
+    llm_model: str = "phi3:mini"
+
+
+@dataclass
+class PlannerConfig:
+    """Task planner settings."""
+    enabled: bool = True
+    max_steps: int = 10
+
+
+@dataclass
+class MemoryConfig:
+    """Persistent memory settings."""
+    database_path: str = "memory/database.db"
+    max_conversation_log: int = 1000
+
+
+@dataclass
+class PermissionsConfig:
+    """Permission system settings."""
+    permissions_file: str = "config/permissions.json"
+
+
+@dataclass
 class Settings:
     """
     Master settings container for HomePilot.
@@ -140,6 +168,7 @@ class Settings:
     to all subsystem settings with sensible defaults.
     """
     assistant_name: str = "Jarvis"
+    user_name: str = "User"
     language: str = "en"
     log_level: str = "INFO"
     log_file: str = "logs/homepilot.log"
@@ -155,6 +184,10 @@ class Settings:
     security: SecurityConfig = field(default_factory=SecurityConfig)
     plugins: PluginConfig = field(default_factory=PluginConfig)
     sounds: SoundsConfig = field(default_factory=SoundsConfig)
+    agent: AgentConfig = field(default_factory=AgentConfig)
+    planner: PlannerConfig = field(default_factory=PlannerConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
+    permissions: PermissionsConfig = field(default_factory=PermissionsConfig)
 
     @classmethod
     def load(cls, config_path: str | Path | None = None) -> Settings:
@@ -258,6 +291,7 @@ class Settings:
         """Build Settings from a raw dict (parsed YAML)."""
         settings = cls(
             assistant_name=data.get("assistant_name", cls.assistant_name),
+            user_name=data.get("user_name", cls.user_name),
             language=data.get("language", cls.language),
             log_level=data.get("log_level", cls.log_level),
             log_file=data.get("log_file", cls.log_file),
@@ -275,6 +309,10 @@ class Settings:
             "security": (SecurityConfig, "security"),
             "plugins": (PluginConfig, "plugins"),
             "sounds": (SoundsConfig, "sounds"),
+            "agent": (AgentConfig, "agent"),
+            "planner": (PlannerConfig, "planner"),
+            "memory": (MemoryConfig, "memory"),
+            "permissions": (PermissionsConfig, "permissions"),
         }
         for attr, (klass, key) in _map.items():
             sub_data = data.get(key, {})

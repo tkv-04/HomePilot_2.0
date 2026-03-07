@@ -1,0 +1,9 @@
+{
+    "allow_system_restart": true,
+    "allow_file_delete": false,
+    "allow_file_write": true,
+    "allow_network_scan": false,
+    "allow_git_operations": true,
+    "allow_script_execution": true,
+    "allow_ha_control": true
+}

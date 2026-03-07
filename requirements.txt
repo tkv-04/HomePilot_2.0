@@ -5,11 +5,14 @@
 pvporcupine>=3.0.0
 pvrecorder>=1.2.0
 
-# Speech-to-Text (Offline)
+# Speech-to-Text (Offline + Online)
+faster-whisper>=1.0.0
 vosk>=0.3.45
+SpeechRecognition>=3.10.0
 
-# Text-to-Speech (Offline)
+# Text-to-Speech (Offline + Online)
 piper-tts>=1.2.0
+gTTS>=2.5.0
 
 # Audio Processing
 sounddevice>=0.4.6

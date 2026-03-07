@@ -50,6 +50,10 @@ class HomePilot:
 
     Manages the lifecycle of all subsystems and runs the
     continuous voice interaction loop.
+
+    Voice pipeline: Wake Word → STT → Agent.process() → TTS
+    The Agent uses IntentParser for reliable tool selection and
+    the LLM for JARVIS-style witty responses.
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -81,6 +85,12 @@ class HomePilot:
         self._context_memory = ContextMemory(max_turns=10)
         self._personality = Personality(name=settings.assistant_name)
 
+        # Agent system (JARVIS personality + tool execution)
+        self._agent = None
+        self._tool_router = None
+        self._persistent_memory = None
+        self._llm_engine = None
+
     def start(self) -> None:
         """
         Initialize all subsystems and start the main loop.
@@ -89,7 +99,7 @@ class HomePilot:
         shutdown is requested.
         """
         self._logger.info("=" * 60)
-        self._logger.info("  HomePilot v2.0 — '%s' starting up", self.settings.assistant_name)
+        self._logger.info("  HomePilot v2.1 — '%s' starting up", self.settings.assistant_name)
         self._logger.info("=" * 60)
 
         # Register signal handlers for graceful shutdown
@@ -124,10 +134,14 @@ class HomePilot:
         # Shutdown in reverse order
         if self._tts_engine:
             try:
-                self._tts_engine.speak_blocking("Goodbye!")
+                farewell = self._agent.process("goodbye") if self._agent else "Goodbye!"
+                self._tts_engine.speak_blocking(farewell)
             except Exception:
                 pass
             self._tts_engine.shutdown()
+
+        if self._persistent_memory:
+            self._persistent_memory.close()
 
         if self._timer_manager:
             self._timer_manager.stop()
@@ -185,8 +199,24 @@ class HomePilot:
         self._tts_engine.initialize(output_device=s.audio.output_device)
 
         # ── Intent & Entity ──
+        # Try to initialize optional LLM engine (Ollama)
+        self._llm_engine = None
+        try:
+            from homepilot.llm.llm_engine import LLMEngine
+            llm = LLMEngine(
+                model=s.agent.llm_model,
+            )
+            if llm.is_available():
+                self._llm_engine = llm
+                self._logger.info("🧠 LLM intelligence enabled (Ollama — %s)", s.agent.llm_model)
+            else:
+                self._logger.info("LLM not available — using regex/keyword/fuzzy matching")
+        except Exception as e:
+            self._logger.info("LLM not available: %s", e)
+
         self._intent_parser = IntentParser(
             confidence_threshold=s.intent.confidence_threshold,
+            llm_engine=self._llm_engine,
         )
         self._entity_resolver = EntityResolver()
 
@@ -236,7 +266,7 @@ class HomePilot:
             )
             self._plugin_manager.load_plugins()
 
-        # ── Command Executor ──
+        # ── Command Executor (kept for timer/plugin routing) ──
         self._command_executor = CommandExecutor(
             system_controller=self._system_controller,
             ha_client=self._ha_client if s.home_assistant.enabled else None,
@@ -247,6 +277,67 @@ class HomePilot:
         )
         if self._event_loop:
             self._command_executor.set_event_loop(self._event_loop)
+
+        # ── JARVIS Agent System ──
+        self._logger.info("Initializing JARVIS agent system...")
+
+        from homepilot.core.permissions import PermissionManager
+        permissions = PermissionManager(
+            permissions_path=s.resolve_path(s.permissions.permissions_file),
+        )
+
+        from homepilot.core.tool_router import ToolRouter
+        self._tool_router = ToolRouter(permission_manager=permissions)
+
+        # Register tools
+        from homepilot.tools.system_tools import register_tools as reg_system
+        reg_system(self._tool_router, system_controller=self._system_controller)
+
+        from homepilot.tools.file_tools import register_tools as reg_file
+        reg_file(self._tool_router)
+
+        from homepilot.tools.dev_tools import register_tools as reg_dev
+        reg_dev(self._tool_router)
+
+        from homepilot.tools.home_assistant_tools import register_tools as reg_ha
+        reg_ha(
+            self._tool_router,
+            ha_client=self._ha_client if s.home_assistant.enabled else None,
+            event_loop=self._event_loop,
+        )
+
+        self._logger.info("📦 Registered %d tools", len(self._tool_router.list_tools()))
+
+        # Persistent Memory
+        from homepilot.core.memory import PersistentMemory
+        self._persistent_memory = PersistentMemory(
+            db_path=s.resolve_path(s.memory.database_path),
+        )
+        self._persistent_memory.ensure_user(s.user_name)
+
+        # Planner
+        from homepilot.core.planner import Planner
+        planner = None
+        if s.planner.enabled and self._llm_engine:
+            planner = Planner(
+                llm_generate=self._llm_engine.generate_response,
+                max_steps=s.planner.max_steps,
+            )
+
+        # The Agent — heart of JARVIS
+        from homepilot.core.agent import Agent
+        self._agent = Agent(
+            llm_engine=self._llm_engine,
+            tool_router=self._tool_router,
+            memory=self._persistent_memory,
+            intent_parser=self._intent_parser,
+            entity_resolver=self._entity_resolver,
+            planner=planner,
+            assistant_name=s.assistant_name,
+            user_name=s.user_name,
+            max_tool_iterations=s.agent.max_tool_iterations,
+        )
+        self._logger.info("🤖 JARVIS agent online")
 
         # ── Start Audio ──
         self._audio_stream.start()
@@ -280,7 +371,7 @@ class HomePilot:
                 time.sleep(1.0)  # Prevent tight error loops
 
     def _handle_wake(self) -> None:
-        """Handle a wake word detection event."""
+        """Handle a wake word detection — process through JARVIS agent."""
         self._logger.info("🎤 Wake word detected! Entering command mode...")
 
         # Play confirmation sound
@@ -288,7 +379,7 @@ class HomePilot:
         if wake_sound.exists():
             play_wav(str(wake_sound), device=self.settings.audio.output_device)
         else:
-            # Speak a brief acknowledgment using personality
+            # Speak a brief acknowledgment
             if self._tts_engine:
                 self._tts_engine.speak_blocking(self._personality.acknowledge())
 
@@ -302,33 +393,20 @@ class HomePilot:
         if not transcript:
             self._logger.info("No speech detected. Returning to listen mode.")
             if self._tts_engine:
-                self._tts_engine.speak(self._personality.idle_prompt())
+                self._tts_engine.speak(
+                    self._personality.idle_prompt()
+                )
             return
 
         self._logger.info("📝 Transcript: '%s'", transcript)
 
-        # Parse intent
+        # ── Route through the JARVIS Agent ──
+        # The Agent handles: intent parsing → tool execution → witty response
+        response = self._agent.process(transcript)
+        self._logger.info("💬 JARVIS: '%s'", response)
+
+        # Store in short-term context memory too (for follow-ups)
         intent = self._intent_parser.parse(transcript)
-        self._logger.info(
-            "🎯 Intent: %s (confidence=%.2f)",
-            intent.name, intent.confidence,
-        )
-
-        # Resolve entities — use context memory for follow-ups
-        entities = self._entity_resolver.resolve(intent.name, intent.slots)
-
-        # Fill missing device/room from conversation context
-        if not entities.device_name and self._context_memory.last_device:
-            entities.device_name = self._context_memory.last_device
-            self._logger.debug("Using device from context: %s", entities.device_name)
-        if not entities.room and self._context_memory.last_room:
-            entities.room = self._context_memory.last_room
-
-        # Execute command
-        response = self._command_executor.execute(intent, entities)
-        self._logger.info("💬 Response: '%s'", response)
-
-        # Store in conversation memory
         self._context_memory.add_turn(
             user_text=transcript,
             intent_name=intent.name,
@@ -336,7 +414,7 @@ class HomePilot:
             response=response,
         )
 
-        # Speak response
+        # Speak the response
         if self._tts_engine and response:
             self._tts_engine.speak(response)
 
@@ -380,6 +458,13 @@ def main() -> None:
         action="store_true",
         help="Enable debug logging",
     )
+    parser.add_argument(
+        "-m", "--mode",
+        type=str,
+        choices=["voice", "cli"],
+        default="voice",
+        help="Run mode: 'voice' (full voice pipeline) or 'cli' (text agent)",
+    )
     args = parser.parse_args()
 
     # Load settings
@@ -387,10 +472,178 @@ def main() -> None:
     if args.verbose:
         settings.log_level = "DEBUG"
 
-    # Create and run
-    pilot = HomePilot(settings)
-    pilot.start()
+    if args.mode == "cli":
+        _run_cli_mode(settings)
+    else:
+        # Default: voice mode (existing behavior)
+        pilot = HomePilot(settings)
+        pilot.start()
+
+
+def _run_cli_mode(settings: Settings) -> None:
+    """
+    Run HomePilot in CLI agent mode.
+
+    Initializes the LLM, tool system, memory, and planner,
+    then starts the interactive CLI REPL.
+    """
+    from homepilot.utils.logger import setup_logger
+    logger = setup_logger(
+        name="homepilot",
+        log_level=settings.log_level,
+        log_file=str(settings.resolve_path(settings.log_file)),
+    )
+
+    logger.info("=" * 60)
+    logger.info("  HomePilot v2.1 — '%s' CLI Agent Mode", settings.assistant_name)
+    logger.info("=" * 60)
+
+    # ── LLM Engine ──
+    llm_engine = None
+    try:
+        from homepilot.llm.llm_engine import LLMEngine
+        llm = LLMEngine(
+            model=settings.agent.llm_model,
+        )
+        if llm.is_available():
+            llm_engine = llm
+            logger.info("🧠 LLM intelligence enabled (Ollama — %s)", settings.agent.llm_model)
+        else:
+            logger.warning("⚠️  Ollama not running — agent will have limited capabilities")
+    except Exception as e:
+        logger.warning("LLM not available: %s", e)
+
+    # ── Permissions ──
+    from homepilot.core.permissions import PermissionManager
+    permissions = PermissionManager(
+        permissions_path=settings.resolve_path(settings.permissions.permissions_file),
+    )
+
+    # ── Tool Router ──
+    from homepilot.core.tool_router import ToolRouter
+    router = ToolRouter(permission_manager=permissions)
+
+    # ── Register System Tools ──
+    from homepilot.os_control.system_commands import SystemController
+    system_controller = SystemController(settings.os_control)
+
+    from homepilot.tools.system_tools import register_tools as reg_system
+    reg_system(router, system_controller=system_controller)
+
+    # ── Register File Tools ──
+    from homepilot.tools.file_tools import register_tools as reg_file
+    reg_file(router)
+
+    # ── Register Dev Tools ──
+    from homepilot.tools.dev_tools import register_tools as reg_dev
+    reg_dev(router)
+
+    # ── Register Home Assistant Tools ──
+    ha_client = None
+    event_loop = None
+    if settings.home_assistant.enabled:
+        import asyncio
+        from homepilot.home_assistant.ha_client import HomeAssistantClient
+        ha_client = HomeAssistantClient(settings.home_assistant)
+
+        event_loop = asyncio.new_event_loop()
+        loop_thread = threading.Thread(
+            target=event_loop.run_forever,
+            daemon=True,
+            name="async-loop",
+        )
+        loop_thread.start()
+
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                ha_client.connect(), event_loop,
+            )
+            connected = future.result(timeout=15)
+            if connected:
+                logger.info("Home Assistant connected.")
+            else:
+                logger.warning("Home Assistant connection failed.")
+        except Exception as e:
+            logger.warning("Home Assistant connection error: %s", e)
+
+    from homepilot.tools.home_assistant_tools import register_tools as reg_ha
+    reg_ha(router, ha_client=ha_client, event_loop=event_loop)
+
+    logger.info("📦 Registered %d tools", len(router.list_tools()))
+
+    # ── Persistent Memory ──
+    from homepilot.core.memory import PersistentMemory
+    memory = PersistentMemory(
+        db_path=settings.resolve_path(settings.memory.database_path),
+    )
+    memory.ensure_user(settings.user_name)
+
+    # ── Planner ──
+    from homepilot.core.planner import Planner
+    planner = None
+    if settings.planner.enabled and llm_engine:
+        planner = Planner(
+            llm_generate=llm_engine.generate_response,
+            max_steps=settings.planner.max_steps,
+        )
+        logger.info("📋 Task planner enabled")
+
+    # ── Intent Parser & Entity Resolver ──
+    # These are the "brains" — reliable intent detection via
+    # regex/keyword/fuzzy/LLM matching. The Agent uses these
+    # for tool selection and the LLM purely for personality.
+    from homepilot.intent_engine.intent_parser import IntentParser
+    from homepilot.entity_resolver.resolver import EntityResolver
+
+    intent_parser = IntentParser(
+        confidence_threshold=settings.intent.confidence_threshold,
+        llm_engine=llm_engine,
+    )
+    entity_resolver = EntityResolver()
+    logger.info("🎯 Intent parser ready (4-layer matching)")
+
+    # ── Agent ──
+    from homepilot.core.agent import Agent
+    agent = Agent(
+        llm_engine=llm_engine,
+        tool_router=router,
+        memory=memory,
+        intent_parser=intent_parser,
+        entity_resolver=entity_resolver,
+        planner=planner,
+        assistant_name=settings.assistant_name,
+        user_name=settings.user_name,
+        max_tool_iterations=settings.agent.max_tool_iterations,
+    )
+
+    # ── CLI Interface ──
+    from homepilot.interfaces.cli import CLIInterface
+    cli = CLIInterface(
+        agent=agent,
+        tool_router=router,
+        memory=memory,
+        assistant_name=settings.assistant_name,
+        user_name=settings.user_name,
+    )
+
+    try:
+        cli.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        memory.close()
+        if ha_client and event_loop:
+            import asyncio
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    ha_client.close(), event_loop,
+                ).result(timeout=5)
+            except Exception:
+                pass
+            event_loop.call_soon_threadsafe(event_loop.stop)
+        logger.info("HomePilot CLI agent shut down. Goodbye! 👋")
 
 
 if __name__ == "__main__":
     main()
+
